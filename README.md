@@ -79,6 +79,28 @@ pip install openpyxl   # 스크립트 전용
 python make_creditcard_sample_excel.py
 ```
 
+### 5) 모델 비교·하이퍼파라미터 탐색 (선택)
+
+`model_comparison.py`는 **동일 Train(SMOTETomek) / 동일 Test(원 불균형)** 를 유지한 채,
+**로지스틱 회귀**와 **XGBoost** 각각에 대해 베이스라인 vs **RandomizedSearchCV** 튜닝 결과를 같은 Test에서 비교합니다.
+
+- **CV 스코어:** **F2(β=2)** — 사기 **미탐(FN)** 에 더 큰 페널티를 두는 방향(Recall 가중)이라 FDS 맥락과 맞춤.
+- **Test 출력:** Recall, **F1**, **F2**, PR-AUC(임계값 0.5 기준 이진 예측은 Recall/F1/F2에만 사용, PR-AUC는 확률 전체).
+
+```bash
+python model_comparison.py
+python model_comparison.py --out benchmark_results.csv
+```
+
+실행에는 **수 분** 걸릴 수 있습니다. Streamlit·`train_save_artifacts.py`가 쓰는 모델은 기본적으로 `fds_pipeline`의 **고정 XGB 설정**이며, 튜닝으로 얻은 최적 파라미터를 쓰려면 `fds_pipeline`의 `XGBClassifier` 인자를 스크립트 출력에 맞게 **수동 반영**하면 됩니다.
+
+---
+
+## 지표 선택: F1 vs F2
+
+- **F1**은 Precision·Recall을 **동일 가중**(β=1)으로 묶은 값이라, 불균형 FDS에서 **오탐(FP)** 과 **미탐(FN)** 을 같은 비중으로 볼 때 적합한 요약입니다.
+- **F2**는 Recall에 **더 큰 비중**(β=2)을 두므로, “사기를 놓치는 비용이 더 크다”는 가정에 가깝습니다. 본 프로젝트는 **RandomizedSearchCV 튜닝 목표**와 **Streamlit 사이드바 지표**를 **F2** 위주로 맞추었고, 비교·보고용으로 **F1도 함께** 기록합니다.
+
 ---
 
 ## 동작 요약
@@ -98,6 +120,7 @@ python make_creditcard_sample_excel.py
 | `fds_pipeline.py` | 전처리·분할·리샘플·학습 단일 진입 |
 | `shap_waterfall_style.py` | SHAP 워터폴 matplotlib 정리 |
 | `train_save_artifacts.py` | joblib 아티팩트 저장 |
+| `model_comparison.py` | LR·XGB 베이스라인 vs F2 기준 CV 튜닝, Test 표 출력 |
 | `generate_report_*.py` | 보고서용 PNG 생성 |
 | `dataset/creditcard_sample_100.xlsx` | 스키마 참고용 소표본 |
 
