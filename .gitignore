@@ -28,3 +28,6 @@ Thumbs.db
 
 # Jupyter
 .ipynb_checkpoints/
+
+# 보고서/과제용 그림 — 용량·정합 유지 위해 Git 제외, 노트북·generate_report_*.py 로 재생성
+report_figures/*.png
