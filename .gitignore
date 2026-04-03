@@ -1,0 +1,30 @@
+# 가상환경
+venv/
+.venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# 학습 산출물 (용량 큼 → 로컬에서 train_save_artifacts.py 로 생성)
+artifacts/
+
+# 원본 데이터(Kaggle 등) — README 에 경로 안내 후 직접 배치
+dataset/creditcard.csv
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
