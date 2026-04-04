@@ -1,7 +1,4 @@
-"""
-FDS 학습 파이프라인 (단일 진실 소스).
-app.py · train_save_artifacts.py · 보고서 스크립트에서 동일 전처리를 재사용합니다.
-"""
+# creditcard 전처리·XGB 학습. app·스크립트에서 동일하게 import.
 from pathlib import Path
 from typing import Tuple
 
@@ -15,19 +12,28 @@ from sklearn.preprocessing import RobustScaler
 CSV_DEFAULT = Path("dataset/creditcard.csv")
 RANDOM_STATE = 42
 TEST_SIZE = 0.2
+SECONDS_PER_DAY = 86400
+
+# 베이스라인 XGB (model_comparison·보고서와 동일 값)
+XGB_BASELINE_PARAMS = {
+    "n_estimators": 100,
+    "learning_rate": 0.1,
+    "random_state": RANDOM_STATE,
+    "n_jobs": -1,
+    "base_score": 0.5,
+}
+
+
+def make_xgb_baseline() -> xgb.XGBClassifier:
+    return xgb.XGBClassifier(**XGB_BASELINE_PARAMS)
 
 
 def preprocess_creditcard_dataframe(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Series, RobustScaler]:
-    """원시 creditcard 행( Time, Amount, Class, V* … ) → 특성 행렬 X, 정답 y, Amount용 스케일러.
-
-    학습 파이프라인과 동일: Time → sin/cos, Time 컬럼 제거, Amount는 **전체 df**에 대해 RobustScaler fit 후 변환,
-    그 다음 ``stratified_train_test_split_creditcard`` 로 나눈다.
-
-    보고서 전용 시각화(EDA KDE 등)는 원시 ``df``를 따로 쓰면 된다.
-    """
+    # Time → sin/cos(86400초 기준) 후 Time 제거. Amount는 RobustScaler로 변환(df 전체에 fit).
+    # 분할·SMOTE는 이 함수 밖에서 한다. EDA 원시 분포는 입력 df로 그린다.
     out = df.copy()
-    out["Time_sin"] = np.sin(2 * np.pi * out["Time"] / 86400)
-    out["Time_cos"] = np.cos(2 * np.pi * out["Time"] / 86400)
+    out["Time_sin"] = np.sin(2 * np.pi * out["Time"] / SECONDS_PER_DAY)
+    out["Time_cos"] = np.cos(2 * np.pi * out["Time"] / SECONDS_PER_DAY)
     out = out.drop(["Time"], axis=1)
     scaler = RobustScaler()
     out["Amount"] = scaler.fit_transform(out["Amount"].values.reshape(-1, 1))
@@ -55,13 +61,7 @@ def resample_train_smotetomek(
 def train_xgb_pipeline(
     csv_path: Path | str = CSV_DEFAULT,
 ) -> Tuple[xgb.XGBClassifier, pd.DataFrame, pd.Series, RobustScaler]:
-    """
-    creditcard CSV를 읽어 전처리(pandas) → SMOTETomek → XGBoost 학습까지 수행.
-
-    Returns
-    -------
-    model, X_test, y_test, scaler
-    """
+    # CSV 읽기 → 전처리 → 층화 분할 → Train에 SMOTETomek → XGBoost fit. 반환: model, X_test, y_test, scaler.
     path = Path(csv_path)
     if not path.is_file():
         raise FileNotFoundError(
@@ -73,13 +73,7 @@ def train_xgb_pipeline(
     X_train, X_test, y_train, y_test = stratified_train_test_split_creditcard(X, y)
     X_train_res, y_train_res = resample_train_smotetomek(X_train, y_train)
 
-    model = xgb.XGBClassifier(
-        n_estimators=100,
-        learning_rate=0.1,
-        random_state=RANDOM_STATE,
-        n_jobs=-1,
-        base_score=0.5,
-    )
+    model = make_xgb_baseline()
     model.fit(X_train_res, y_train_res)
 
     return model, X_test, y_test, scaler

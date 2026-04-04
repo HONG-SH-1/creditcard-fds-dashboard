@@ -1,25 +1,28 @@
-"""
-보고서 3.1절용 도식·검증 그림.
+# report_figures/ 에 2-Track·배깅/부스팅·학습곡선 PNG.
+# python report/generate_report_model_diagrams.py
+from __future__ import annotations
 
-저장 (report_figures/):
-- model_diagram_two_track.png           : RF vs XGB 동일 Train·Test 2-Track 흐름
-- model_diagram_bagging_boosting.png    : 배깅 vs 부스팅 개념도
-- model_diagram_learning_curve.png      : Train·검증 Recall 학습곡선 (RF/XGB, 소표본·CV)
-  ※ GridSearch 미수행 프로젝트에 맞춤. 보고서에는 '검증 Recall로 학습 크기별 안정성 점검' 등으로 서술.
-"""
+import sys
+from pathlib import Path
 from typing import Tuple
+
+_ROOT = Path(__file__).resolve().parent.parent
+_REPORT = Path(__file__).resolve().parent
+for p in (_ROOT, _REPORT):
+    if str(p) not in sys.path:
+        sys.path.insert(0, str(p))
 
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import numpy as np
 import pandas as pd
-import xgboost as xgb
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import StratifiedKFold, learning_curve, train_test_split
 
 from fds_pipeline import (
     CSV_DEFAULT,
     RANDOM_STATE,
+    make_xgb_baseline,
     preprocess_creditcard_dataframe,
     resample_train_smotetomek,
     stratified_train_test_split_creditcard,
@@ -134,7 +137,7 @@ def fig_bagging_boosting() -> None:
 
 
 def _load_train_res(max_rows_after_resample: int = 20_000) -> Tuple[pd.DataFrame, pd.Series]:
-    """학습곡선용: fds_pipeline과 동일 전처리·분할 후 Train 층화 축소 → SMOTETomek (수 분 이상 방지)."""
+    # 학습곡선용: fds_pipeline과 동일 전처리·분할 후 Train 층화 축소 → SMOTETomek (수 분 이상 방지).
     df = pd.read_csv(CSV_PATH)
     X, y, _ = preprocess_creditcard_dataframe(df)
     X_train, _, y_train, _ = stratified_train_test_split_creditcard(X, y)
@@ -163,17 +166,7 @@ def fig_learning_curves() -> None:
             RandomForestClassifier(n_estimators=100, random_state=RANDOM_STATE, n_jobs=-1),
             "RandomForest",
         ),
-        (
-            ax2,
-            xgb.XGBClassifier(
-                n_estimators=100,
-                learning_rate=0.1,
-                random_state=RANDOM_STATE,
-                n_jobs=-1,
-                base_score=0.5,
-            ),
-            "XGBoost",
-        ),
+        (ax2, make_xgb_baseline(), "XGBoost"),
     ]:
         sizes, train_sc, val_sc = learning_curve(
             est,

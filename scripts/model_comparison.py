@@ -1,25 +1,21 @@
-"""
-SMOTETomek Train / 원 불균형 Test 고정 조건에서
-로지스틱 회귀·XGBoost 베이스라인 vs 하이퍼파라미터 탐색 모델을 비교하고,
-동일 Test에서 Recall·F1·F2·PR-AUC를 출력합니다.
-
-CV 스코어는 미탐 비용을 더 반영하기 위해 F2(β=2)를 사용합니다.
-전체 CSV 기준 수 분 이상 걸릴 수 있습니다.
-
-사용:
-  python model_comparison.py
-  python model_comparison.py --out benchmark_results.csv
-"""
+# 동일 Train(SMOTETomek)·Test(원 불균형)에서 LR·RF·XGB 벤치마크. CV는 F2.
+# python scripts/model_comparison.py [--out benchmark_results.csv]
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 from typing import Any
+
+_ROOT = Path(__file__).resolve().parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
 import numpy as np
 import pandas as pd
 import xgboost as xgb
 from scipy.stats import loguniform, randint, uniform
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
     average_precision_score,
@@ -35,6 +31,7 @@ from sklearn.preprocessing import StandardScaler
 from fds_pipeline import (
     CSV_DEFAULT,
     RANDOM_STATE,
+    make_xgb_baseline,
     preprocess_creditcard_dataframe,
     resample_train_smotetomek,
     stratified_train_test_split_creditcard,
@@ -64,13 +61,12 @@ def _metrics_at_threshold(y_true, y_prob, thr: float = 0.5) -> dict[str, float]:
 
 
 def _baseline_xgb() -> xgb.XGBClassifier:
-    return xgb.XGBClassifier(
-        n_estimators=100,
-        learning_rate=0.1,
-        random_state=RANDOM_STATE,
-        n_jobs=-1,
-        base_score=0.5,
-    )
+    return make_xgb_baseline()
+
+
+def _baseline_rf() -> RandomForestClassifier:
+    # RF 베이스라인 고정 하이퍼.
+    return RandomForestClassifier(n_estimators=100, random_state=RANDOM_STATE, n_jobs=-1)
 
 
 def run_search_lr(
@@ -158,20 +154,17 @@ def _flatten_params(name: str, best: Any) -> dict[str, Any]:
     return {f"{name}__{k}": params.get(k) for k in keys}
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="LR vs XGB benchmark + tuning on SMOTETomek train")
-    parser.add_argument("--csv", type=Path, default=CSV_DEFAULT)
-    parser.add_argument("--out", type=Path, default=None, help="optional CSV path for metric table")
-    args = parser.parse_args()
+def run_benchmark(csv_path: Path | str = CSV_DEFAULT) -> tuple[pd.DataFrame, dict[str, Any]]:
+    # 임계값 0.5 기준 지표 표 + 튜닝 메타.
+    path = Path(csv_path)
+    if not path.is_file():
+        raise FileNotFoundError(f"{path} 없음. Kaggle CSV를 dataset/에 두세요.")
 
-    if not args.csv.is_file():
-        raise FileNotFoundError(f"{args.csv} 없음. Kaggle CSV를 dataset/에 두세요.")
-
-    X_tr, y_tr, X_te, y_te = _load_train_test_resampled(args.csv)
+    X_tr, y_tr, X_te, y_te = _load_train_test_resampled(path)
 
     rows: list[dict[str, Any]] = []
 
-    # --- Logistic Regression (linear baseline; StandardScaler in pipeline) ---
+    # --- Logistic Regression ---
     lr_base = Pipeline(
         steps=[
             ("scaler", StandardScaler()),
@@ -189,7 +182,7 @@ def main() -> None:
     )
     lr_base.fit(X_tr, y_tr)
     m = _metrics_at_threshold(y_te, lr_base.predict_proba(X_te)[:, 1])
-    rows.append({"model": "LogisticRegression (baseline)", **m, "cv_best_f2": None})
+    rows.append({"model": "LogisticRegression (baseline)", **m, "cv_best_f2": np.nan})
 
     lr_best, lr_search = run_search_lr(X_tr, y_tr)
     m = _metrics_at_threshold(y_te, lr_best.predict_proba(X_te)[:, 1])
@@ -201,11 +194,17 @@ def main() -> None:
         }
     )
 
+    # --- RandomForest (2-Track, 고정 하이퍼파라미터) ---
+    rf_base = _baseline_rf()
+    rf_base.fit(X_tr, y_tr)
+    m = _metrics_at_threshold(y_te, rf_base.predict_proba(X_te)[:, 1])
+    rows.append({"model": "RandomForest (baseline, 2-Track)", **m, "cv_best_f2": np.nan})
+
     # --- XGBoost ---
     xgb_base = _baseline_xgb()
     xgb_base.fit(X_tr, y_tr)
     m = _metrics_at_threshold(y_te, xgb_base.predict_proba(X_te)[:, 1])
-    rows.append({"model": "XGBoost (baseline, fds defaults)", **m, "cv_best_f2": None})
+    rows.append({"model": "XGBoost (baseline, fds defaults)", **m, "cv_best_f2": np.nan})
 
     xgb_best, xgb_search = run_search_xgb(X_tr, y_tr)
     m = _metrics_at_threshold(y_te, xgb_best.predict_proba(X_te)[:, 1])
@@ -218,13 +217,34 @@ def main() -> None:
     )
 
     df = pd.DataFrame(rows)
+    meta: dict[str, Any] = {
+        "csv_path": str(path.resolve()),
+        "random_state": RANDOM_STATE,
+        "threshold": 0.5,
+        "split": "stratified 0.2 test, SMOTETomek on train only",
+        "lr_tuned_params": _flatten_params("lr", lr_best),
+        "xgb_tuned_params": _flatten_params("xgb", xgb_best),
+        "lr_cv_best_f2": float(lr_search.best_score_),
+        "xgb_cv_best_f2": float(xgb_search.best_score_),
+    }
+    return df, meta
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Hold-out 벤치마크 (SMOTETomek train)")
+    parser.add_argument("--csv", type=Path, default=CSV_DEFAULT)
+    parser.add_argument("--out", type=Path, default=None, help="지표 CSV 저장 경로")
+    args = parser.parse_args()
+
+    df, meta = run_benchmark(args.csv)
+
     pd.set_option("display.max_columns", None)
     pd.set_option("display.width", 120)
     print("\n=== Hold-out Test (threshold=0.5), Train=SMOTETomek / Test=원 불균형 ===\n")
     print(df.to_string(index=False))
     print("\n=== Tuned best params (요약) ===\n")
-    print("LogisticRegression:", _flatten_params("lr", lr_best))
-    print("XGBoost:", _flatten_params("xgb", xgb_best))
+    print("LogisticRegression:", meta["lr_tuned_params"])
+    print("XGBoost:", meta["xgb_tuned_params"])
 
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)

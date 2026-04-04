@@ -1,8 +1,13 @@
-"""
-로컬에서 1회 실행: 학습 후 artifacts/*.pkl 저장.
-Streamlit(app.py)은 이 파일들이 있으면 학습 없이 로드만 수행합니다.
-"""
+# 학습 후 artifacts/*.pkl 저장. app은 이 파일이 있으면 로드만 함.
+# python scripts/train_save_artifacts.py
+from __future__ import annotations
+
+import sys
 from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
 import joblib
 

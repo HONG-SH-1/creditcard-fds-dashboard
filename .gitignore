@@ -31,3 +31,14 @@ Thumbs.db
 
 # 보고서/과제용 그림 — 용량·정합 유지 위해 Git 제외, 노트북·generate_report_*.py 로 재생성
 report_figures/*.png
+
+# 로컬에서만 쓰는 실측 표·메타(경로·시각 개인화) — 필요 시 README만 추적
+report_outputs/*
+!report_outputs/README.md
+
+# 임시 추출·로컬 메모 (PDF 텍스트 추출 등)
+_pdf_extract*.txt
+*_extract_temp.txt
+
+# Streamlit / OS 캐시
+.streamlit/secrets.toml

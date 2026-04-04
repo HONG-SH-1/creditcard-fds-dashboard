@@ -1,4 +1,4 @@
-"""SHAP waterfall matplotlib fixes shared by Streamlit app and report notebooks."""
+# SHAP 워터폴 matplotlib 보정(한글·레이아웃).
 
 from __future__ import annotations
 
@@ -11,10 +11,12 @@ import matplotlib.text as mtext
 from matplotlib.axes import Axes
 import matplotlib.pyplot as plt
 import numpy as np
+import shap
+from matplotlib.figure import Figure
 
 
 def shap_display_feature_names(columns) -> np.ndarray:
-    """워터폴 축 라벨용(모델 입력 컬럼명은 변경하지 않음)."""
+    # 워터폴 축 라벨용(모델 입력 컬럼명은 변경하지 않음).
     out: list[str] = []
     fixed = {
         "Time_sin": "시간 주기(sin)",
@@ -32,11 +34,7 @@ def shap_display_feature_names(columns) -> np.ndarray:
 
 
 def configure_matplotlib_for_shap() -> None:
-    """SHAP 워터폴: 한글 폰트 + ASCII 마이너스 + '$'·'$$'를 수식이 아니라 글자로만 다루지 않게 방지.
-
-    Matplotlib 3.10+ 기본값 text.parse_math=True 이면 SHAP가 넣는 `$E[f(X)]$` 등이
-    mathtext로 파싱되다 꼬여 화면에 `$$` 잔상이 남을 수 있음 → 전역으로 끔.
-    """
+    # 한글 폰트, 유니코드 마이너스, text.parse_math 끔(SHAP $ 표기 깨짐 방지).
     mpl.rcParams["axes.unicode_minus"] = False
     try:
         mpl.rcParams["text.parse_math"] = False
@@ -67,7 +65,7 @@ _SHAP_MINUS_DISPLAY = "-"
 
 
 def _brutal_shap_label(s: str) -> str:
-    """SHAP 워터폴 문자열 최종 정리: $ 제거·ㅁ□·U+2212 등 → ASCII '-' 음수·E[f(X)] 접두."""
+    # SHAP 워터폴 문자열 최종 정리: $ 제거·ㅁ□·U+2212 등 → ASCII '-' 음수·E[f(X)] 접두.
     if not s:
         return s
     t = re.sub(r"\$+", "", s).replace("＄", "")
@@ -406,11 +404,16 @@ def scrub_every_text_in_figure(fig) -> None:
 
 
 def shap_waterfall_fig_height_inches(n_values: int, max_display: int = 10) -> float:
+    # 행 수·max_display에 맞춘 figure 높이(인치).
     n_val = int(n_values)
     max_disp = int(max_display)
     n_rows = min(max_disp, n_val) + (1 if n_val > max_disp else 0)
-    fig_h = 2.35 + n_rows * 0.62
-    return float(max(6.2, min(fig_h, 12.0)))
+    fig_h = 2.85 + n_rows * 0.82
+    return float(max(7.5, min(fig_h, 18.0)))
+
+
+# tight_layout(rect=...) — bottom 너무 크면 행 간격 붕괴
+_SHAP_TIGHT_RECT = (0.02, 0.14, 0.98, 0.94)
 
 
 def finalize_shap_waterfall_figure(
@@ -421,7 +424,7 @@ def finalize_shap_waterfall_figure(
     width_inches: float = 11.0,
     max_display: int = 10,
 ) -> None:
-    """Post-process current figure after ``shap.plots.waterfall(..., show=False)`` (same as app)."""
+    # waterfall(show=False) 직후 figure 정리.
     merge_shap_twiny_duplicate_labels(fig)
     merge_shap_split_value_labels(fig)
     sanitize_shap_figure_mathtext(fig)
@@ -432,7 +435,7 @@ def finalize_shap_waterfall_figure(
     fig.set_size_inches(width_inches, float(fig_h))
 
     bump_shap_main_axis_x_tickpad(fig)
-    plt.tight_layout(rect=(0.02, 0.26, 0.98, 0.9))
+    plt.tight_layout(rect=_SHAP_TIGHT_RECT)
     polish_shap_figure_after_layout(fig)
     try:
         fig.canvas.draw()
@@ -449,8 +452,39 @@ def finalize_shap_waterfall_figure(
         fx = float(fraud_prob)
 
     set_shap_waterfall_footer_xlabel(fig, bv, fx)
-    plt.tight_layout(rect=(0.02, 0.26, 0.98, 0.9))
+    plt.tight_layout(rect=_SHAP_TIGHT_RECT)
     try:
         fig.canvas.draw()
     except Exception:
         pass
+
+
+SHAP_WATERFALL_MAX_DISPLAY = 10
+
+
+def plot_waterfall_row(
+    explainer,
+    sample_df,
+    fraud_prob: float | None = None,
+    *,
+    max_display: int = SHAP_WATERFALL_MAX_DISPLAY,
+    width_inches: float = 11.0,
+) -> Figure:
+    # explainer → waterfall → finalize 한 번에. fraud_prob 없으면 푸터 f(x)는 SHAP 합으로 맞춤.
+    shap_values = explainer(sample_df)
+    r = shap_values[0]
+    names = shap_display_feature_names(sample_df.columns)
+    row_for_plot = shap.Explanation(
+        values=r.values,
+        base_values=r.base_values,
+        data=r.data,
+        feature_names=names,
+    )
+    configure_matplotlib_for_shap()
+    with shap_waterfall_render_patches():
+        shap.plots.waterfall(row_for_plot, max_display=max_display, show=False)
+    fig = plt.gcf()
+    finalize_shap_waterfall_figure(
+        fig, row_for_plot, fraud_prob, max_display=max_display, width_inches=width_inches
+    )
+    return fig

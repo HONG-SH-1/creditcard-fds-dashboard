@@ -1,8 +1,13 @@
-"""
-creditcard.csv 원본 컬럼·값 형식을 유지한 채 행만 줄여 .xlsx를 만듭니다.
-fds_pipeline.CSV_DEFAULT와 동일한 파일을 입력으로 씁니다.
-"""
+# creditcard.csv에서 N행만 뽑아 xlsx로 저장.
+# python scripts/make_creditcard_sample_excel.py
+from __future__ import annotations
+
+import sys
 from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
 import pandas as pd
 
@@ -13,8 +18,8 @@ N_ROWS = 100
 # "random" : 재현 가능한 무작위 표본(random_state=42), 분포가 원본에 가깝게
 SAMPLE_MODE = "random"
 
-CSV_IN = Path(__file__).resolve().parent / "dataset" / "creditcard.csv"
-XLSX_OUT = Path(__file__).resolve().parent / "dataset" / "creditcard_sample_100.xlsx"
+CSV_IN = _ROOT / "dataset" / "creditcard.csv"
+XLSX_OUT = _ROOT / "dataset" / "creditcard_sample_100.xlsx"
 
 
 def main() -> None:

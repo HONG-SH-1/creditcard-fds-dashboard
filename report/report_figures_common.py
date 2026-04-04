@@ -1,4 +1,4 @@
-"""보고서 PNG용 공통: 한글 폰트, 출력 폴더."""
+# 한글 폰트·report_figures 경로.
 
 from pathlib import Path
 

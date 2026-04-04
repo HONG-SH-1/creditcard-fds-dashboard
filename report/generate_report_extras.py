@@ -1,8 +1,16 @@
-"""
-보고서 그림 7·8용 PNG (노트북과 동일 파일명).
-- 07_top_v_kde_by_class.png : Class와 상관 큰 V 상위 3개, 정상 vs 사기 KDE (원시 스케일 EDA)
-- 08_smotetomek_pca_before_after.png : fds_pipeline 전처리·분할 후 Train 리샘플 전·후 PCA 2D
-"""
+# report_figures/ 에 07·08 PNG (KDE, SMOTETomek 전후 PCA).
+# python report/generate_report_extras.py
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parent.parent
+_REPORT = Path(__file__).resolve().parent
+for p in (_ROOT, _REPORT):
+    if str(p) not in sys.path:
+        sys.path.insert(0, str(p))
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
