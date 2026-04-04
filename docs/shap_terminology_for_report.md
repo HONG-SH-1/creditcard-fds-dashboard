@@ -1,18 +1,20 @@
 # SHAP 표현 (코드와 맞추기)
 
-## 구현
+보고서에 “어떤 SHAP을 썼다”고 쓸 때, 이 저장소의 **실제 구현**과 어긋나지 않게 하기 위한 메모다.
 
-- `app.py`: `shap.Explainer(fraud_proba, background)` — `predict_proba[:,1]` callable, 배경은 `X_test` 최대 500건.
-- XGB 2.x TreeExplainer 직렬화 이슈를 피하려고 확률 기반 Explainer를 쓴다. “TreeExplainer만 썼다”고 쓰면 코드와 어긋날 수 있다.
+## 코드에서 하는 일
 
-## 보고서 예시 문장
+- `app.py`에서는 `shap.Explainer(...)`에 **모델 전체가 아니라**, `predict_proba`에서 사기 클래스(두 번째 열) 확률만 돌려 주는 **함수**를 넣는다. 배경 데이터는 테스트 세트에서 최대 500건까지 쓴다.  
+- XGBoost 2.x에서는 트리 전용 TreeExplainer를 쓸 때 직렬화 이슈가 있어서, 여기서는 **확률 기반 Explainer**로 통일했다. 보고서에 “TreeExplainer만 사용했다”고 단정하면 코드와 맞지 않는다.
 
-> 단건 설명에 SHAP Explainer를 썼다. 사기 확률 함수와 배경 샘플을 넣어 워터폴로 기여를 그렸다.
+## 보고서에 쓸 만한 문장 예시
 
-## 피할 표현
+> 단건 설명을 위해 SHAP Explainer를 사용했다. 사기 확률을 출력하는 함수와 배경 샘플을 넣어 워터폴로 기여도를 시각화했다.
 
-- TreeExplainer만 사용 (단정)
+## 피하면 좋은 표현
 
-## 후처리
+- “TreeExplainer만 사용”처럼 구현과 다른 단정
 
-- `shap_waterfall_style.py`는 글꼴·라벨 정리용이고 SHAP 값 알고리즘과는 별개다.
+## `shap_waterfall_style.py`는 따로
+
+이 파일은 **글꼴·축 라벨·레이아웃**을 화면에 맞게 고치는 역할이다. SHAP 값을 어떤 알고리즘으로 계산했는지와는 별개다.
