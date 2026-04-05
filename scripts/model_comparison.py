@@ -23,8 +23,9 @@ from sklearn.metrics import (
     fbeta_score,
     make_scorer,
     recall_score,
+    roc_auc_score,
 )
-from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold
+from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold, train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
@@ -48,6 +49,38 @@ def _load_train_test_resampled(
     X_train, X_test, y_train, y_test = stratified_train_test_split_creditcard(X, y)
     X_tr, y_tr = resample_train_smotetomek(X_train, y_train)
     return X_tr, y_tr, X_test, y_test
+
+
+def _load_fit_val_test_resampled(
+    csv_path: Path,
+    val_fraction: float = 0.15,
+) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]:
+    """Train을 fit|val로 층화 분할 → SMOTETomek은 fit에만. 임계값은 val에서만 선택."""
+    df = pd.read_csv(csv_path)
+    X, y, _ = preprocess_creditcard_dataframe(df)
+    X_train, X_test, y_train, y_test = stratified_train_test_split_creditcard(X, y)
+    X_fit, X_val, y_fit, y_val = train_test_split(
+        X_train,
+        y_train,
+        test_size=val_fraction,
+        stratify=y_train,
+        random_state=RANDOM_STATE,
+    )
+    X_res, y_res = resample_train_smotetomek(X_fit, y_fit)
+    return X_res, y_res, X_val, y_val, X_test, y_test
+
+
+def best_threshold_max_f2(y_true: np.ndarray, y_prob: np.ndarray) -> tuple[float, float]:
+    """검증 라벨·확률에서 F2를 최대화하는 임계값 (0.01~0.99 그리드)."""
+    y_true = np.asarray(y_true)
+    best_thr, best_f2 = 0.5, -1.0
+    for thr in np.linspace(0.01, 0.99, 99):
+        y_hat = (y_prob >= thr).astype(int)
+        f2 = float(fbeta_score(y_true, y_hat, beta=2))
+        if f2 > best_f2:
+            best_f2 = f2
+            best_thr = float(thr)
+    return best_thr, best_f2
 
 
 def _metrics_at_threshold(y_true, y_prob, thr: float = 0.5) -> dict[str, float]:
@@ -226,6 +259,87 @@ def run_benchmark(csv_path: Path | str = CSV_DEFAULT) -> tuple[pd.DataFrame, dic
         "xgb_tuned_params": _flatten_params("xgb", xgb_best),
         "lr_cv_best_f2": float(lr_search.best_score_),
         "xgb_cv_best_f2": float(xgb_search.best_score_),
+    }
+    return df, meta
+
+
+def run_round2_val_threshold(
+    csv_path: Path | str = CSV_DEFAULT,
+    *,
+    val_fraction: float = 0.15,
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """RF·XGB 베이스라인·XGB 튜닝 3종: val에서 F2 최대 임계값 선택 후 test만 평가."""
+    path = Path(csv_path)
+    if not path.is_file():
+        raise FileNotFoundError(f"{path} 없음. Kaggle CSV를 dataset/에 두세요.")
+
+    X_res, y_res, X_val, y_val, X_te, y_te = _load_fit_val_test_resampled(path, val_fraction)
+
+    rows: list[dict[str, Any]] = []
+    meta_models: dict[str, Any] = {}
+
+    print("[1/3] RandomForest baseline...", flush=True)
+    rf_base = _baseline_rf()
+    rf_base.fit(X_res, y_res)
+    p_val_rf = rf_base.predict_proba(X_val)[:, 1]
+    thr_rf, val_f2_rf = best_threshold_max_f2(y_val.values, p_val_rf)
+    p_te_rf = rf_base.predict_proba(X_te)[:, 1]
+    m_rf = _metrics_at_threshold(y_te, p_te_rf, thr_rf)
+    m_rf["roc_auc"] = float(roc_auc_score(y_te, p_te_rf))
+    rows.append(
+        {
+            "model": "RandomForest (baseline, 2-Track)",
+            "val_best_thr_f2": thr_rf,
+            "val_f2_at_thr": val_f2_rf,
+            "cv_best_f2_train": np.nan,
+            **m_rf,
+        }
+    )
+
+    print("[2/3] XGBoost baseline...", flush=True)
+    xgb_base = _baseline_xgb()
+    xgb_base.fit(X_res, y_res)
+    p_val_x = xgb_base.predict_proba(X_val)[:, 1]
+    thr_x, val_f2_x = best_threshold_max_f2(y_val.values, p_val_x)
+    p_te_x = xgb_base.predict_proba(X_te)[:, 1]
+    m_x = _metrics_at_threshold(y_te, p_te_x, thr_x)
+    m_x["roc_auc"] = float(roc_auc_score(y_te, p_te_x))
+    rows.append(
+        {
+            "model": "XGBoost (baseline, fds defaults)",
+            "val_best_thr_f2": thr_x,
+            "val_f2_at_thr": val_f2_x,
+            "cv_best_f2_train": np.nan,
+            **m_x,
+        }
+    )
+
+    print("[3/3] XGBoost RandomizedSearchCV (F2)...", flush=True)
+    xgb_best, xgb_search = run_search_xgb(X_res, y_res)
+    p_val_t = xgb_best.predict_proba(X_val)[:, 1]
+    thr_t, val_f2_t = best_threshold_max_f2(y_val.values, p_val_t)
+    p_te_t = xgb_best.predict_proba(X_te)[:, 1]
+    m_t = _metrics_at_threshold(y_te, p_te_t, thr_t)
+    m_t["roc_auc"] = float(roc_auc_score(y_te, p_te_t))
+    rows.append(
+        {
+            "model": "XGBoost (tuned, CV=F2)",
+            "val_best_thr_f2": thr_t,
+            "val_f2_at_thr": val_f2_t,
+            "cv_best_f2_train": float(xgb_search.best_score_),
+            **m_t,
+        }
+    )
+    meta_models["xgb_tuned_params"] = _flatten_params("xgb", xgb_best)
+
+    df = pd.DataFrame(rows)
+    meta: dict[str, Any] = {
+        "csv_path": str(path.resolve()),
+        "random_state": RANDOM_STATE,
+        "val_fraction": val_fraction,
+        "threshold_rule": "per-model max F2 on validation (grid 0.01..0.99); test evaluated once",
+        "split": "same 80/20 train|test as fds_pipeline; train split into fit|val before SMOTETomek on fit only",
+        **meta_models,
     }
     return df, meta
 

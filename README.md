@@ -66,7 +66,9 @@ python report/generate_report_extras.py
 python report/generate_report_model_diagrams.py
 ```
 
-노트북 `fds_report_figures.ipynb`로 같은 데이터를 다른 각도에서 그릴 수도 있다.
+노트북 `fds_report_figures.ipynb`로 같은 데이터를 다른 각도에서 그릴 수도 한다.
+
+노트북 `fds_preprocessing_walkthrough.ipynb`는 `fds_pipeline.py`와 **같은 순서**로 전처리·분할·리샘플만 셀 단위로 본다(학습·XGB·SHAP은 범위 밖). 마지막에 `train_xgb_pipeline`만 안내한다. **동작 요약**과 같은 줄기이며, 보고서 목차(데이터 이해 → 전처리 근거 → 분할·SMOTETomek)에 맞추기 좋다.
 
 ### Excel 샘플 (선택)
 
@@ -88,6 +90,29 @@ python scripts/model_comparison.py
 python scripts/model_comparison.py --out benchmark_results.csv
 ```
 
+**5종 모델 비교 그래프** — 베이스라인 3종 + LR·XGB 튜닝(RandomizedSearchCV, CV=F2). 동일 split·Test 평가로 `report_figures/`에 아래를 저장한다. (`*.png`는 Git에 넣지 않음.)
+
+- `model_compare_all_metrics.csv` — Recall, F1, F2, PR-AUC, ROC-AUC, `cv_best_f2_train`(튜닝 모델만)  
+- `model_compare_all_metrics_bar.png` — 지표 막대  
+- `model_compare_all_roc.png`, `model_compare_all_pr.png` — ROC / PR  
+- `model_compare_all_confusion.png` — 혼동행렬 5분할  
+- `model_compare_all_calibration.png` — 보정 곡선  
+- `model_compare_all_threshold_curves.png` — 임계값–Recall·Precision·F1  
+
+SMOTETomek + LR/XGB 탐색 때문에 **전체 CSV 기준 수십 분** 걸릴 수 있다.
+
+```bash
+python scripts/model_comparison_visualize.py
+python scripts/model_comparison_visualize.py --out-dir report_figures
+```
+
+**2차(3모델, 검증 임계값)** — 랜덤 포레스트 베이스라인·XGB 베이스라인·XGB 튜닝만 대상으로 한다. 원시 train을 fit|검증으로 층화 분할한 뒤 SMOTETomek은 fit에만 적용하고, **각 모델의 검증 확률에서 F2가 최대가 되는 임계값(0.01~0.99)** 을 고른 다음 **동일 test**에서만 Recall·F1·F2 등을 계산한다. 1차는 전체 train을 리샘플해 학습하므로 **숫자를 1차 CSV와 직접 줄줄 비교하지는 말 것**.
+
+```bash
+python scripts/model_comparison_round2.py
+python scripts/model_comparison_round2.py --val-fraction 0.15 --out report_figures/model_round2_val_thr.csv
+```
+
 ### 보고서용 표·메타 (선택)
 
 ```bash
@@ -98,6 +123,28 @@ python report/export_report_bundle.py
 
 - `docs/f1_f2_for_report.md` — F1·F2를 보고서에 어떻게 쓸지  
 - `docs/shap_terminology_for_report.md` — SHAP 설명을 코드와 맞출 때  
+- `docs/leakage_and_scaling.md` — 누출·처리 순서·Amount 스케일(full vs train-only)·불균형 전략 정리  
+
+### 전처리 비교 실험 (선택)
+
+같은 Train/Test 분할·같은 XGB 베이스라인으로 아래를 한 번에 출력한다.
+
+- **실험 1:** `RobustScaler`를 전체 df에 fit한 경우 vs Train에만 fit한 경우(둘 다 Train에 SMOTETomek 후 학습).  
+- **실험 2:** 스케일은 전체 fit로 통일한 뒤, SMOTETomek vs 리샘플 없이 `scale_pos_weight`(neg/pos).
+
+```bash
+python scripts/compare_preprocessing_strategies.py
+```
+
+전체 CSV(약 28만 행)는 SMOTETomek 때문에 **수 분~수십 분** 걸릴 수 있다. 먼저 빠르게 돌려 보려면 앞 N행만 쓴다.
+
+```bash
+python scripts/compare_preprocessing_strategies.py --max-rows 50000
+```
+
+보고서용 최종 수치는 `--max-rows` 없이 전체 데이터로 한 번 돌리는 편이 안전하다.
+
+설명은 `docs/leakage_and_scaling.md`와 맞춰 두었다. `fds_preprocessing_walkthrough.ipynb` 부록과도 같은 맥락이다.
 
 ---
 
@@ -132,9 +179,12 @@ Streamlit 사이드바와 `model_comparison.py`의 튜닝 목표는 **F2**로 �
 | `shap_waterfall_style.py` | SHAP 워터폴 그림을 화면에 맞게 보정 |
 | `scripts/train_save_artifacts.py` | 학습 결과를 pkl로 저장 |
 | `scripts/model_comparison.py` | 여러 모델 hold-out 비교 |
+| `scripts/model_comparison_visualize.py` | 5모델 비교(ROC/PR/막대/혼동/보정/임계값) |
+| `scripts/model_comparison_round2.py` | RF·XGB 3종, 검증 F2 최대 임계값 후 test 평가 |
+| `scripts/compare_preprocessing_strategies.py` | 스케일·불균형 전략 비교(동일 split) |
 | `report/export_report_bundle.py` | 보고서용 CSV·MD·JSON 묶음 생성 |
 | `report/generate_report_*.py` | 보고서 삽입용 PNG 생성 |
-| `docs/` | 보고서 문장·용어 메모 |
+| `docs/` | 보고서 문장·용어·누출/스케일 메모 |
 
 ---
 
