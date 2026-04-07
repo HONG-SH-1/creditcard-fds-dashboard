@@ -12,6 +12,7 @@ _REPORT = _ROOT / "report"
 for p in (_ROOT, _REPORT):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
+import repro_threads  # noqa: E402
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -189,7 +190,7 @@ def plot_pr(y_true: np.ndarray, prob_dict: dict[str, np.ndarray], out: Path) -> 
     ax.set_xlabel("Recall")
     ax.set_ylabel("Precision")
     ax.set_title("Precision–Recall 곡선 (Test)")
-    ax.legend(loc="upper right", fontsize=8)
+    ax.legend(loc="lower left", fontsize=8)
     plt.tight_layout()
     fig.savefig(out, dpi=150, bbox_inches="tight")
     plt.close()

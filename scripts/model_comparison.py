@@ -10,6 +10,7 @@ from typing import Any
 _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
+import repro_threads  # noqa: E402
 
 import numpy as np
 import pandas as pd
@@ -99,7 +100,7 @@ def _baseline_xgb() -> xgb.XGBClassifier:
 
 def _baseline_rf() -> RandomForestClassifier:
     # RF 베이스라인 고정 하이퍼.
-    return RandomForestClassifier(n_estimators=100, random_state=RANDOM_STATE, n_jobs=-1)
+    return RandomForestClassifier(n_estimators=100, random_state=RANDOM_STATE, n_jobs=1)
 
 
 def run_search_lr(
@@ -130,7 +131,7 @@ def run_search_lr(
         scoring=F2_SCORER,
         cv=cv,
         random_state=RANDOM_STATE,
-        n_jobs=-1,
+        n_jobs=1,
         refit=True,
     )
     search.fit(X_train, y_train)
@@ -143,7 +144,7 @@ def run_search_xgb(
 ) -> tuple[xgb.XGBClassifier, RandomizedSearchCV]:
     base = xgb.XGBClassifier(
         random_state=RANDOM_STATE,
-        n_jobs=-1,
+        n_jobs=1,
         base_score=0.5,
         tree_method="hist",
     )
@@ -163,7 +164,7 @@ def run_search_xgb(
         scoring=F2_SCORER,
         cv=cv,
         random_state=RANDOM_STATE,
-        n_jobs=-1,
+        n_jobs=1,
         refit=True,
     )
     search.fit(X_train, y_train)

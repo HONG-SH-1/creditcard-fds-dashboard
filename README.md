@@ -59,7 +59,7 @@ python scripts/train_save_artifacts.py
 
 ### 보고서용 그림
 
-PNG 그림은 용량·환경마다 달라질 수 있어서 Git에 포함하지 않는다. 필요할 때 아래를 실행해 `report_figures/`에 만든다.
+PNG·CSV 산출물은 용량·환경마다 달라질 수 있어서 Git에 포함하지 않는다. 필요할 때 아래를 실행해 `report_figures/`에 만든다. 보조 EDA 플롯(`scripts/report_plots/plot_eda_*.py` 등)은 **`report_figures/eda/`** 에 저장된다. 한 번에 다시 뽑을 때는 `scripts/regenerate_all_report_assets.ps1` 을 프로젝트 루트에서 실행할 수 있다(시간이 오래 걸릴 수 있음). 노트북 `fds_report_figures.ipynb`는 스크립트에 포함하지 않았다.
 
 ```bash
 python report/generate_report_extras.py

@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 from matplotlib import font_manager
 
 REPORT_FIGURES_OUT = Path("report_figures")
+# EDA·보조용 플롯(scripts/report_plots 등) — 메인 노트북·model_compare_* 와 같은 루트(report_figures) 하위
+REPORT_FIGURES_EDA = REPORT_FIGURES_OUT / "eda"
 
 
 def setup_korean_matplotlib_font() -> None:

@@ -11,6 +11,7 @@ _REPORT = Path(__file__).resolve().parent
 for p in (_ROOT, _REPORT):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
+import repro_threads  # noqa: E402
 
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
@@ -163,7 +164,7 @@ def fig_learning_curves() -> None:
     for ax, est, name in [
         (
             ax1,
-            RandomForestClassifier(n_estimators=100, random_state=RANDOM_STATE, n_jobs=-1),
+            RandomForestClassifier(n_estimators=100, random_state=RANDOM_STATE, n_jobs=1),
             "RandomForest",
         ),
         (ax2, make_xgb_baseline(), "XGBoost"),
@@ -175,7 +176,7 @@ def fig_learning_curves() -> None:
             train_sizes=train_sizes,
             cv=cv,
             scoring="recall",
-            n_jobs=-1,
+            n_jobs=1,
         )
         train_mean = train_sc.mean(axis=1)
         val_mean = val_sc.mean(axis=1)

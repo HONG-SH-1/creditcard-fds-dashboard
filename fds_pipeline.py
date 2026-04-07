@@ -1,6 +1,14 @@
 # creditcard 전처리·XGB 학습. app·스크립트에서 동일하게 import.
+from __future__ import annotations
+
+import sys
 from pathlib import Path
 from typing import Tuple
+
+_ROOT = Path(__file__).resolve().parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+import repro_threads  # noqa: E402 — numpy 이전에 BLAS 스레드 고정
 
 import numpy as np
 import pandas as pd
@@ -19,7 +27,7 @@ XGB_BASELINE_PARAMS = {
     "n_estimators": 100,
     "learning_rate": 0.1,
     "random_state": RANDOM_STATE,
-    "n_jobs": -1,
+    "n_jobs": 1,  # 재현성(병렬 트리 순서 비결정성 방지). 속도는 느려질 수 있음.
     "base_score": 0.5,
 }
 
